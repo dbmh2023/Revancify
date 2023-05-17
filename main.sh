@@ -29,7 +29,7 @@ initialize() {
     repoDir=$(find "$HOME" -type d -name "Revancify")
     header=(dialog --backtitle "Revancify | [Arch: $arch, SU: $rootStatus]" --no-shadow)
     envFile=config.cfg
-    [ ! -f .appSizeVars ] && : > .appSizeVars
+    [ ! -f "apps/.appSize" ] && : > "apps/.appSize"
 
     forceUpdateCheckStatus="" riplibsRVX="" lightTheme="" patchMenuBeforePatching="" launchAppAfterMount="" allowVersionDowngrade=""
     setEnv forceUpdateCheckStatus false init "$envFile"
@@ -502,7 +502,7 @@ fetchApk() {
     checkPatched || return 1
     if [ -f "apps/$appName-$appVer/base.apk" ]; then
         # shellcheck source=/dev/null
-        if [ "$(source ".appSizeVars"; eval echo \$"${appName//-/_}"Size)" != "$([ -f "apps/$appName-$appVer/base.apk" ] && du -b "apps/$appName-$appVer/base.apk" | cut -d $'\t' -f 1 || echo 0)" ]; then
+        if [ "$(source "apps/.appSize"; eval echo \$"${appName//-/_}"Size)" != "$([ -f "apps/$appName-$appVer/base.apk" ] && du -b "apps/$appName-$appVer/base.apk" | cut -d $'\t' -f 1 || echo 0)" ]; then
             downloadApp
         fi
     else
@@ -516,7 +516,7 @@ downloadApp() {
     appUrl=$( (bash "$repoDir/fetch_link.sh" "$developerName" "$apkmirrorAppName" "$appVer" "$repoDir" 2>&3 | "${header[@]}" --begin 2 0 --gauge "App    : $appName\nVersion: $selectedVer\n\nScraping Download Link..." -1 -1 0 >&2) 3>&1)
     tput civis
     appSize="$(curl -sLI "$appUrl" -A "$userAgent" | sed -n '/Content-Length/s/[^0-9]*//p' | tr -d '\r')"
-    setEnv "${appName//-/_}Size" "$appSize" update .appSizeVars
+    setEnv "${appName//-/_}Size" "$appSize" update "apps/.appSize"
     case $appUrl in
     "error" )
         "${header[@]}" --msgbox "Unable to fetch link !!\nThere is some problem with your internet connection. Disable VPN or Change your network." 12 45
