@@ -97,12 +97,12 @@ resourcesVars() {
     # shellcheck source=/dev/null
     source ./".${source}-data"
 
-    ls "$cliSource"-CLI-*.jar >/dev/null 2>&1 && cliAvailable=$(basename "$cliSource"-CLI-*.jar .jar | cut -d '-' -f 3) || cliAvailable="Not found"
+    ls "$cliSource"-cli-*.jar >/dev/null 2>&1 && cliAvailable=$(basename "$cliSource"-cli-*.jar .jar | cut -d '-' -f 3) || cliAvailable="Not found"
     ls "$patchesSource"-patches-*.jar >/dev/null 2>&1 && patchesAvailable=$(basename "$patchesSource"-patches-*.jar .jar | cut -d '-' -f 3) || patchesAvailable="Not found"
     ls "$patchesSource"-patches-*.json >/dev/null 2>&1 && jsonAvailable=$(basename "$patchesSource"-patches-*.json .json | cut -d '-' -f 3) || jsonAvailable="Not found"
     ls "$integrationsSource"-integrations-*.apk >/dev/null 2>&1 && integrationsAvailable=$(basename "$integrationsSource"-integrations-*.apk .apk | cut -d '-' -f 3) || integrationsAvailable="Not found"
 
-    cliAvailableSize=$(ls "$cliSource"-CLI-*.jar >/dev/null 2>&1 && du -b "$cliSource"-CLI-*.jar | cut -d $'\t' -f 1 || echo 0)
+    cliAvailableSize=$(ls "$cliSource"-cli-*.jar >/dev/null 2>&1 && du -b "$cliSource"-cli-*.jar | cut -d $'\t' -f 1 || echo 0)
     patchesAvailableSize=$(ls "$patchesSource"-patches-*.jar >/dev/null 2>&1 && du -b "$patchesSource"-patches-*.jar | cut -d $'\t' -f 1 || echo 0)
     integrationsAvailableSize=$(ls "$integrationsSource"-integrations-*.apk >/dev/null 2>&1 && du -b "$integrationsSource"-integrations-*.apk | cut -d $'\t' -f 1 || echo 0)
 }
@@ -118,12 +118,12 @@ getResources() {
         return 1
     fi
     [ "$patchesLatest" != "$patchesAvailable" ] && rm "$patchesSource"-patches-*.jar >/dev/null 2>&1 && rm "$patchesSource"-patches-*.json >/dev/null 2>&1 && patchesAvailableSize=0
-    [ "$cliLatest" != "$cliAvailable" ] && rm "$cliSource"-CLI-*.jar >/dev/null 2>&1 && cliAvailableSize=0
+    [ "$cliLatest" != "$cliAvailable" ] && rm "$cliSource"-cli-*.jar >/dev/null 2>&1 && cliAvailableSize=0
     [ "$integrationsLatest" != "$integrationsAvailable" ] && rm "$integrationsSource"-integrations-*.apk >/dev/null 2>&1 && integrationsAvailableSize=0
     [ "$cliSize" != "$cliAvailableSize" ] &&
-        wget -q -c "$cliUrl" -O "$cliSource"-CLI-"$cliLatest".jar --show-progress --user-agent="$userAgent" 2>&1 | stdbuf -o0 cut -b 63-65 | stdbuf -o0 grep '[0-9]' | "${header[@]}" --begin 2 0 --gauge "Source  : $sourceName\nResource: CLI\nVersion : $cliLatest\nSize    : $(numfmt --to=iec --format="%0.1f" "$cliSize")\n\nDownloading..." -1 -1 $(($(("$cliAvailableSize" * 100)) / "$cliSize")) && tput civis
+        wget -q -c "$cliUrl" -O "$cliSource"-cli-"$cliLatest".jar --show-progress --user-agent="$userAgent" 2>&1 | stdbuf -o0 cut -b 63-65 | stdbuf -o0 grep '[0-9]' | "${header[@]}" --begin 2 0 --gauge "Source  : $sourceName\nResource: CLI\nVersion : $cliLatest\nSize    : $(numfmt --to=iec --format="%0.1f" "$cliSize")\n\nDownloading..." -1 -1 $(($(("$cliAvailableSize" * 100)) / "$cliSize")) && tput civis
 
-    [ "$cliSize" != "$(ls "$cliSource"-CLI-*.jar >/dev/null 2>&1 && du -b "$cliSource"-CLI-*.jar | cut -d $'\t' -f 1 || echo 0)" ] && "${header[@]}" --msgbox "Oops! Unable to download completely.\n\nRetry or change your Network." 12 45 && return 1
+    [ "$cliSize" != "$(ls "$cliSource"-cli-*.jar >/dev/null 2>&1 && du -b "$cliSource"-cli-*.jar | cut -d $'\t' -f 1 || echo 0)" ] && "${header[@]}" --msgbox "Oops! Unable to download completely.\n\nRetry or change your Network." 12 45 && return 1
 
     [ "$patchesSize" != "$patchesAvailableSize" ] &&
         wget -q -c "$patchesUrl" -O "$patchesSource"-patches-"$patchesLatest".jar --show-progress --user-agent="$userAgent" 2>&1 | stdbuf -o0 cut -b 63-65 | stdbuf -o0 grep '[0-9]' | "${header[@]}" --begin 2 0 --gauge "Source  : $sourceName\nResource: Patches\nVersion : $patchesLatest\nSize    : $(numfmt --to=iec --format="%0.1f" "$patchesSize")\n\nDownloading..." -1 -1 $(($(("$patchesAvailableSize" * 100 / "$patchesSize")))) && tput civis && patchesUpdated=true
@@ -139,7 +139,7 @@ getResources() {
 
     if [ "$patchesUpdated" == "true" ]; then
         "${header[@]}" --infobox "Updating patches and options file..." 12 45
-        java -jar "$cliSource"-CLI-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a noinput.apk -o nooutput.apk --options "$storagePath/$source-options.json" >/dev/null 2>&1
+        java -jar "$cliSource"-cli-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a noinput.apk -o nooutput.apk --options "$storagePath/$source-options.json" >/dev/null 2>&1
     fi
 
     if [ "$(bash "$repoDir/fetch_patches.sh" "$source" online "$storagePath")" == "error" ]; then
@@ -244,7 +244,7 @@ editPatchOptions() {
     checkResources || return 1
     if [ ! -f "$storagePath/$source-options.json" ]; then
         "${header[@]}" --infobox "Please Wait !!\nGenerating options file..." 12 45
-        java -jar "$cliSource"-CLI-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a noinput.apk -o nooutput.apk --options "$storagePath/$source-options.json" >/dev/null 2>&1
+        java -jar "$cliSource"-cli-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a noinput.apk -o nooutput.apk --options "$storagePath/$source-options.json" >/dev/null 2>&1
     fi
     currentPatch="none"
     optionsJson=$(jq '.' "$storagePath/$source-options.json")
@@ -330,7 +330,7 @@ checkResources() {
         resourcesVars
         getResources || return 1
     fi
-    if [ "$cliSize" = "$(ls "$cliSource"-CLI-*.jar >/dev/null 2>&1 && du -b "$cliSource"-CLI-*.jar | cut -d $'\t' -f 1 || echo 0)" ] && [ "$patchesSize" = "$(ls "$patchesSource"-patches-*.jar >/dev/null 2>&1 && du -b "$patchesSource"-patches-*.jar | cut -d $'\t' -f 1 || echo 0)" ] && [ "$integrationsSize" = "$(ls "$integrationsSource"-integrations-*.apk >/dev/null 2>&1 && du -b "$integrationsSource"-integrations-*.apk | cut -d $'\t' -f 1 || echo 0)" ] && ls "$storagePath/$source-patches.json" >/dev/null 2>&1; then
+    if [ "$cliSize" = "$(ls "$cliSource"-cli-*.jar >/dev/null 2>&1 && du -b "$cliSource"-cli-*.jar | cut -d $'\t' -f 1 || echo 0)" ] && [ "$patchesSize" = "$(ls "$patchesSource"-patches-*.jar >/dev/null 2>&1 && du -b "$patchesSource"-patches-*.jar | cut -d $'\t' -f 1 || echo 0)" ] && [ "$integrationsSize" = "$(ls "$integrationsSource"-integrations-*.apk >/dev/null 2>&1 && du -b "$integrationsSource"-integrations-*.apk | cut -d $'\t' -f 1 || echo 0)" ] && ls "$storagePath/$source-patches.json" >/dev/null 2>&1; then
         :
     else
         getResources || return 1
@@ -572,8 +572,8 @@ patchApp() {
     fi
     includedPatches=$(jq '.' "$storagePath/$source-patches.json" 2>/dev/null || jq -n '[]')
     patchesArg=$(jq -n -r --argjson includedPatches "$includedPatches" --arg pkgName "$pkgName" '$includedPatches[] | select(.pkgName == $pkgName).includedPatches | if ((. | length) != 0) then (.[] | "-i " + .) else empty end')
-    java -jar "$cliSource"-CLI-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a "apps/$appName-$appVer/base.apk" -o "apps/$appName-$appVer/base-$sourceName.apk" $patchesArg $riplibArgs --keystore "$keystore" --custom-aapt2-binary "$repoDir/binaries/aapt2_$arch" --options "$storagePath/$source-options.json" --experimental --exclusive 2>&1 | tee "$storagePath/patch_log.txt" | "${header[@]}" --begin 2 0 --ok-label "Continue" --cursor-off-label --programbox "Patching $appName $selectedVer.apk" -1 -1
-    echo -e "\n\n\nVariant: $rootStatus\nArch: $arch\nApp: $appName v$appVer\nCLI: $(ls "$cliSource"-CLI-*.jar)\nPatches: $(ls "$patchesSource"-patches-*.jar)\nIntegrations: $(ls "$integrationsSource"-integrations-*.apk)\nPatches argument: ${patchesArg[*]}" >>"$storagePath/patch_log.txt"
+    java -jar "$cliSource"-cli-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a "apps/$appName-$appVer/base.apk" -o "apps/$appName-$appVer/base-$sourceName.apk" $patchesArg $riplibArgs --keystore "$keystore" --custom-aapt2-binary "$repoDir/binaries/aapt2_$arch" --options "$storagePath/$source-options.json" --experimental --exclusive 2>&1 | tee "$storagePath/patch_log.txt" | "${header[@]}" --begin 2 0 --ok-label "Continue" --cursor-off-label --programbox "Patching $appName $selectedVer.apk" -1 -1
+    echo -e "\n\n\nVariant: $rootStatus\nArch: $arch\nApp: $appName v$appVer\nCLI: $(ls "$cliSource"-cli-*.jar)\nPatches: $(ls "$patchesSource"-patches-*.jar)\nIntegrations: $(ls "$integrationsSource"-integrations-*.apk)\nPatches argument: ${patchesArg[*]}" >>"$storagePath/patch_log.txt"
     tput civis
     sleep 1
     if [ ! -f "apps/$appName-$appVer/base-$sourceName.apk" ]; then
@@ -614,7 +614,7 @@ deleteComponents() {
         case "$delComponentPrompt" in
         1 )
             if "${header[@]}" --begin 2 0 --title '| Delete Resources |' --no-items --defaultno --yesno "Please confirm to delete the resources.\nIt will delete the $sourceName CLI, patches and integrations." -1 -1; then
-                rm "$cliSource"-CLI-*.jar >/dev/null 2>&1
+                rm "$cliSource"-cli-*.jar >/dev/null 2>&1
                 rm "$patchesSource"-patches-*.jar >/dev/null 2>&1
                 rm "$patchesSource"-patches-*.json >/dev/null 2>&1
                 rm "$integrationsSource"-integrations-*.apk >/dev/null 2>&1
