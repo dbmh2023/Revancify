@@ -58,7 +58,7 @@ initialize() {
     checkResources || terminate 1
     checkJson
 
-    if ls "$patchesSource-patches.json" >/dev/null 2>&1; then
+    if [ -f "$patchesSource-patches.json" ]; then
         bash "$path/fetch_patches.sh" "$source" >/dev/null 2>&1
         patchesJson=$(jq '.' "$patchesSource"-patches-*.json)
         includedPatches=$(jq '.' "$patchesSource-patches.json" 2>/dev/null || jq -n '[]')
@@ -241,7 +241,7 @@ patchSaver() {
 
 editPatchOptions() {
     checkResources || return 1
-    if ! ls "$storagePath/Revancify/$source-options.json" > /dev/null 2>&1; then
+    if [ ! -f "$storagePath/Revancify/$source-options.json" ]; then
         "${header[@]}" --infobox "Please Wait !!\nGenerating options file..." 12 45
         java -jar "$cliSource"-cli-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a noinput.apk -o nooutput.apk --options "$storagePath/Revancify/$source-options.json" >/dev/null 2>&1
     fi
@@ -299,8 +299,8 @@ rootUninstall() {
 nonRootInstall() {
     "${header[@]}" --infobox "Copying $appName $sourceName $selectedVer to Internal Storage..." 12 45
     sleep 0.5
-    cp "$appName-$sourceName"* "$storagePath/Revancify/" >/dev/null 2>&1
-    termux-open "$storagePath/Revancify/$appName-$sourceName-$appVer.apk"
+    cp -r "$appName-$appVer/base-$sourceName.apk" "$storagePath/Revancify/$appName-$appVer/base-$sourceName.apk" >/dev/null 2>&1
+    termux-open "$storagePath/Revancify/$appName-$appVer/base-$sourceName.apk"
     return 1
 }
 
@@ -309,7 +309,7 @@ checkJson() {
         getResources || return 1
         return 0
     fi
-    if ! ls "$patchesSource-patches.json" >/dev/null 2>&1; then
+    if [ ! -f "$patchesSource-patches.json" ]; then
         internet || return 1
         "${header[@]}" --infobox "Please Wait !!" 12 45
         if [ "$(bash "$path/fetch_patches.sh" "$source" online)" == "error" ]; then
@@ -322,7 +322,7 @@ checkJson() {
 }
 
 checkResources() {
-    if ls ".${source}latest" >/dev/null 2>&1; then
+    if [ -f ".${source}latest" ]; then
         # shellcheck source=/dev/null
         source ./".${source}latest"
     else
@@ -339,7 +339,7 @@ checkResources() {
 getAppVer() {
     if [ "$rootStatus" = "root" ] && su -c "pm list packages | grep -q $pkgName" && [ "$allowVersionDowngrade" == "false" ]; then
         selectedVer=$(su -c dumpsys package "$pkgName" | sed -n '/versionName/s/.*=//p' | sed -n '1p')
-        appVer="${selectedVer// /.}"
+        appVer="v${selectedVer// /.}"
     fi
     if [ "${#appVerList[@]}" -lt 2 ]; then
         internet || return 1
@@ -358,16 +358,16 @@ versionSelector() {
     if [ "$selectedVer" == "Auto Select" ]; then
         selectedVer=$(jq -n -r --argjson includedPatches "$includedPatches" --arg pkgName "$pkgName" '$includedPatches[] | select(.pkgName == $pkgName) | .versions[-1]')
     fi
-    appVer="${selectedVer// /.}"
+    appVer="v${selectedVer// /.}"
 }
 
 checkPatched() {
-    if ls "$appName-$sourceName-$appVer"* >/dev/null 2>&1; then
+    if [ -f "$appName-$appVer/base-$sourceName.apk" ]; then
         "${header[@]}" --begin 2 0 --title '| Patched apk found |' --no-items --defaultno --yes-label 'Patch' --no-label 'Install' --help-button --help-label 'Back' --yesno "Current directory already contains Patched $appName version $selectedVer.\n\n\nDo you want to patch $appName again?" -1 -1
         apkFoundPrompt=$?
         case "$apkFoundPrompt" in
         0 )
-            rm "$appName-$sourceName-$appVer"*
+            rm "$appName-$appVer/base-$sourceName.apk"
             ;;
         1 )
             "${rootStatus}Install" && return 1
@@ -377,7 +377,7 @@ checkPatched() {
             ;;
         esac
     else
-        rm "$appName-$sourceName-"* >/dev/null 2>&1
+        rm "$appName-$appVer/base-$sourceName.apk" >/dev/null 2>&1
         return 0
     fi
 }
@@ -445,7 +445,7 @@ fetchCustomApk() {
     fileAppName=$(grep "application-label:" <<<"$aaptData" | sed -e 's/application-label://' -e 's/'\''//g')
     appName="$(sed 's/\./-/g;s/ /-/g' <<<"$fileAppName")"
     selectedVer=$(grep "package:" <<<"$aaptData" | sed -e 's/.*versionName='\''//' -e 's/'\'' platformBuildVersionName.*//')
-    appVer="${selectedVer// /.}"
+    appVer="v${selectedVer// /.}"
     if [ "$rootStatus" = "root" ] && su -c "pm list packages | grep -q $pkgName" && [ "$allowVersionDowngrade" == "false" ]; then
         installedVer=$(su -c dumpsys package "$pkgName" | sed -n '/versionName/s/.*=//p' | sed -n '1p')
         if [ "$installedVer" != "$selectedVer" ]; then
@@ -457,7 +457,9 @@ fetchCustomApk() {
             fi
         fi
     fi
-    cp "$newPath" "$appName-$appVer.apk"
+    [ -d "$appName-$appVer" ] || mkdir -p "$appName-$appVer"
+    { [ "$rootStatus" == "nonRoot" ] && [ -d "$appName-$appVer" ]; } || mkdir -p "$storagePath/Revancify/$appName-$appVer"
+    cp "$newPath" "$appName-$appVer/base.apk"
     if [ "$(jq -n -r --argjson includedPatches "$includedPatches" --arg pkgName "$pkgName" '$includedPatches[] | select(.pkgName == $pkgName) | .versions | length')" -eq 0 ]; then
         if ! "${header[@]}" --begin 2 0 --title '| Proceed |' --no-items --yesno "The following data is extracted from the apk file you provided.\nApp Name    : $fileAppName\nPackage Name: $pkgName\nVersion     : $selectedVer\nDo you want to proceed with this app?" -1 -1; then
             return 1
@@ -495,13 +497,13 @@ fetchApk() {
         fi
     fi
     checkPatched || return 1
-    if ls "$appName"-"$appVer"* >/dev/null 2>&1; then
+    if [ -f "$appName-$appVer/base.apk" ]; then
         # shellcheck source=/dev/null
-        if [ "$(source ".appSizeVars"; eval echo \$"${appName//-/_}"Size)" != "$([ -f "$appName"-"$appVer".apk ] && du -b "$appName"-"$appVer".apk | cut -d $'\t' -f 1 || echo 0)" ]; then
+        if [ "$(source ".appSizeVars"; eval echo \$"${appName//-/_}"Size)" != "$([ -f "$appName-$appVer/base.apk" ] && du -b "$appName-$appVer/base.apk" | cut -d $'\t' -f 1 || echo 0)" ]; then
             downloadApp
         fi
     else
-        rm "$appName"*.apk >/dev/null 2>&1
+        rm -rf "$appName"* >/dev/null 2>&1
         downloadApp
     fi
 }
@@ -531,10 +533,12 @@ downloadApp() {
         return 1
         ;;
     esac
-    wget -q -c "$appUrl" -O "$appName"-"$appVer".apk --show-progress --user-agent="$userAgent" 2>&1 | stdbuf -o0 cut -b 63-65 | stdbuf -o0 grep '[0-9]' | "${header[@]}" --begin 2 0 --gauge "App    : $appName\nVersion: $selectedVer\nSize   : $(numfmt --to=iec --format="%0.1f" "$appSize")\n\nDownloading..." -1 -1
+    [ -d "$appName-$appVer" ] || mkdir -p "$appName-$appVer"
+    { [ "$rootStatus" == "nonRoot" ] && [ -d "$appName-$appVer" ]; } || mkdir -p "$storagePath/Revancify/$appName-$appVer"
+    wget -q -c "$appUrl" -O "$appName-$appVer/base.apk" --show-progress --user-agent="$userAgent" 2>&1 | stdbuf -o0 cut -b 63-65 | stdbuf -o0 grep '[0-9]' | "${header[@]}" --begin 2 0 --gauge "App    : $appName\nVersion: $selectedVer\nSize   : $(numfmt --to=iec --format="%0.1f" "$appSize")\n\nDownloading..." -1 -1
     tput civis
     sleep 0.5s
-    if [ "$appSize" != "$(du -b "$appName"-"$appVer".apk | cut -d $'\t' -f 1)" ]; then
+    if [ "$appSize" != "$(du -b "$appName-$appVer/base.apk" | cut -d $'\t' -f 1)" ]; then
         "${header[@]}" --msgbox "Oh No !!\nUnable to complete download. Please Check your internet connection and Retry." 12 45
         return 1
     fi
@@ -555,19 +559,19 @@ patchApp() {
         riplibArgs="--rip-lib=x86_64 --rip-lib=x86 --rip-lib=armeabi-v7a --rip-lib=arm64-v8a "
         riplibArgs="${riplibArgs//--rip-lib=$arch /}"
     fi
-    if ls "$storagePath/Revancify/custom.keystore" > /dev/null 2>&1
+    if [ -f "$storagePath/Revancify/custom.keystore" ] > /dev/null 2>&1
     then
-        keystore=$(ls "$storagePath/Revancify/custom.keystore")
+        keystore="$storagePath/Revancify/custom.keystore"
     else
         keystore="$path"/revancify.keystore
     fi
     includedPatches=$(jq '.' "$patchesSource-patches.json" 2>/dev/null || jq -n '[]')
     patchesArg=$(jq -n -r --argjson includedPatches "$includedPatches" --arg pkgName "$pkgName" '$includedPatches[] | select(.pkgName == $pkgName).includedPatches | if ((. | length) != 0) then (.[] | "-i " + .) else empty end')
-    java -jar "$cliSource"-cli-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a "$appName-$appVer.apk" -o "$appName-$sourceName-$appVer.apk" $patchesArg $riplibArgs --keystore "$keystore" --custom-aapt2-binary "$path/binaries/aapt2_$arch" --options "$storagePath/Revancify/$source-options.json" --experimental --exclusive 2>&1 | tee "$storagePath/Revancify/patch_log.txt" | "${header[@]}" --begin 2 0 --ok-label "Continue" --cursor-off-label --programbox "Patching $appName $selectedVer.apk" -1 -1
-    echo -e "\n\n\nVariant: $rootStatus\nArch: $arch\nApp: $appName-$appVer.apk\nCLI: $(ls "$cliSource"-cli-*.jar)\nPatches: $(ls "$patchesSource"-patches-*.jar)\nIntegrations: $(ls "$integrationsSource"-integrations-*.apk)\nPatches argument: ${patchesArg[*]}" >>"$storagePath/Revancify/patch_log.txt"
+    java -jar "$cliSource"-cli-*.jar -b "$patchesSource"-patches-*.jar -m "$integrationsSource"-integrations-*.apk -c -a "$appName-$appVer/base.apk" -o "$appName-$appVer/base-$sourceName.apk" $patchesArg $riplibArgs --keystore "$keystore" --custom-aapt2-binary "$path/binaries/aapt2_$arch" --options "$storagePath/Revancify/$source-options.json" --experimental --exclusive 2>&1 | tee "$storagePath/Revancify/patch_log.txt" | "${header[@]}" --begin 2 0 --ok-label "Continue" --cursor-off-label --programbox "Patching $appName $selectedVer.apk" -1 -1
+    echo -e "\n\n\nVariant: $rootStatus\nArch: $arch\nApp: $appName v$appVer\nCLI: $(ls "$cliSource"-cli-*.jar)\nPatches: $(ls "$patchesSource"-patches-*.jar)\nIntegrations: $(ls "$integrationsSource"-integrations-*.apk)\nPatches argument: ${patchesArg[*]}" >>"$storagePath/Revancify/patch_log.txt"
     tput civis
     sleep 1
-    if ! ls "$appName-$sourceName-$appVer.apk" > /dev/null 2>&1; then
+    if [ ! -f "$appName-$appVer/base-$sourceName.apk" ]; then
         "${header[@]}" --msgbox "Oops, Patching failed !!\nLogs saved to \"Internal Storage > Revancify \> patch_log.txt\". Share the Patchlog to developer." 12 45
         return 1
     fi
